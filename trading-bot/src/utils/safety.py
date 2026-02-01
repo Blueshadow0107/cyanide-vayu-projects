@@ -41,8 +41,8 @@ class KillSwitch:
     def _ensure_state_db(self):
         """Initialize SQLite database."""
         if not STATE_DB.exists():
-            # Run schema
-            schema_path = Path(__file__).parent / ".." / ".." / ".." / ".vayu" / "schema.sql"
+            # Run schema from ~/.vayu/
+            schema_path = VAYU_DIR / "schema.sql"
             if schema_path.exists():
                 with sqlite3.connect(STATE_DB) as conn:
                     with open(schema_path) as f:
