@@ -1,54 +1,119 @@
-# VAYU Trading Bot
+# VAYU Trading Bot 🌀
 
 Automated cryptocurrency trading system using RSI momentum strategy on Kraken.
+
+[![CI/CD](https://github.com/Blueshadow0107/cyanide-vayu-projects/actions/workflows/ci.yml/badge.svg)](https://github.com/Blueshadow0107/cyanide-vayu-projects/actions)
+
+## Features
+
+- **RSI Momentum Strategy** - Mean reversion with trend filter
+- **Risk Management** - 1% risk per trade, 5% daily circuit breaker
+- **Backtesting** - VectorBT-powered historical testing
+- **Performance Tracking** - Real-time metrics and trade history
+- **Paper Trading** - Test with simulated money
+- **Kill Switch** - Emergency stop via Discord
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
+# 1. Clone and install
+git clone https://github.com/Blueshadow0107/cyanide-vayu-projects.git
+cd cyanide-vayu-projects/trading-bot
 pip install -r requirements.txt
 
-# 2. Set environment variables (or use .env file)
-export KRAKEN_API_KEY="your_key"
-export KRAKEN_PRIVATE_KEY="your_secret"
+# 2. Deploy
+./deploy.sh
 
-# 3. Test connection
-python3 src/exchange/kraken_client.py
+# 3. Run backtest
+python3 -m src.backtest.backtest_engine
 
-# 4. Run in sandbox mode (simulated trading)
-python3 main.py
-
-# 5. Run live (⚠️ real money)
-python3 main.py --live
+# 4. Start paper trading
+python3 main.py --paper
 ```
 
 ## Strategy
 
-- **Entry:** RSI < 30 + price > EMA(200) → Long
-- **Exit:** RSI returns to 50, or stop loss (3x ATR), or 48h time limit
-- **Risk:** 1% per trade, 5% daily circuit breaker
+| Component | Setting |
+|-----------|---------|
+| **Entry** | RSI < 30 + Price > EMA(200) |
+| **Exit** | RSI returns to 50, or 3x ATR stop, or 48h limit |
+| **Risk** | 1% account per trade |
+| **Max Positions** | 3 concurrent |
+| **Circuit Breaker** | -5% daily halt |
 
-## Configuration
+## Backtesting
 
-Edit `config/settings.yaml` (coming soon) or pass command-line args:
+```python
+from src.backtest.backtest_engine import BacktestEngine
+from datetime import datetime, timedelta
 
-```bash
-python3 main.py --interval 60  # Check every minute instead of 5 min
+engine = BacktestEngine(
+    symbols=["BTC/USD", "ETH/USD"],
+    start_date=datetime.now() - timedelta(days=90),
+    end_date=datetime.now(),
+    timeframe="1h"
+)
+
+results = engine.run()
+engine.print_report()
 ```
 
-## Discord Integration
+## Performance Dashboard
 
-Kill switch command: `!vayu kill` (coming soon)
+```python
+from src.utils.performance import create_tracker
 
-## Files
+tracker = create_tracker()
+tracker.print_dashboard()
+```
 
-- `main.py` - Main trading engine
-- `DESIGN.md` - Full architecture documentation
-- `src/exchange/` - Exchange API wrapper
-- `src/strategy/` - Signal generation & risk
-- `src/execution/` - Order management
-- `src/data/` - Price feed handler
+## Project Structure
+
+```
+trading-bot/
+├── src/
+│   ├── backtest/       # Backtesting framework
+│   ├── data/          # Price feed handlers
+│   ├── exchange/      # Exchange API wrapper
+│   ├── execution/     # Order management
+│   ├── strategy/      # Signal generation & risk
+│   └── utils/         # Logging, performance tracking
+├── config/            # Configuration files
+├── tests/             # Unit tests
+├── logs/              # Trade logs & performance data
+└── deploy.sh          # Deployment script
+```
+
+## Discord Commands
+
+| Command | Action |
+|---------|--------|
+| `!vayu status` | Show bot status |
+| `!vayu kill` | Emergency stop |
+| `!vayu pnl` | Today's P&L |
+
+## Environment Variables
+
+```bash
+KRAKEN_API_KEY=your_key
+KRAKEN_API_SECRET=your_secret
+DISCORD_WEBHOOK_URL=your_webhook
+```
+
+## Architecture
+
+See [DESIGN.md](DESIGN.md) for full system architecture and deployment phases.
+
+## Roadmap
+
+- [x] Core trading engine
+- [x] Paper trading mode
+- [x] Backtesting framework
+- [x] Performance tracking
+- [ ] Live trading (pending validation)
+- [ ] Multi-pair support
+- [ ] Machine learning signals
 
 ---
 
-🌀 *Built by Vayu-2.0*
+🌀 *Built by Vayu-2.0* | *Precision over performance*
