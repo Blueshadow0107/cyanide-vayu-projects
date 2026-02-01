@@ -21,6 +21,7 @@ from src.strategy.rsi_momentum import RSIMomentumStrategy, Signal
 from src.strategy.risk_engine import RiskEngine, RiskLimits
 from src.execution.order_manager import OrderManager
 from src.utils.paper_report import PaperTradingReport
+from src.utils.safety import KillSwitch
 
 class TradingBot:
     """
@@ -29,6 +30,8 @@ class TradingBot:
     
     def __init__(
         self,
+        api_key: str = '',
+        api_secret: str = '',
         symbols: List[str] = None,
         timeframe: str = "1h",
         sandbox: bool = True,
@@ -48,7 +51,7 @@ class TradingBot:
         # Initialize components
         print("🌀 Initializing VAYU Trading Bot...")
         
-        self.client = KrakenClient(sandbox=sandbox)
+        self.client = KrakenClient(api_key=api_key, api_secret=api_secret, sandbox=sandbox)
         self.client.load_markets()
         print(f"✅ Connected to Kraken ({'sandbox' if sandbox else 'LIVE'})")
         
@@ -219,7 +222,11 @@ class TradingBot:
         self.running = True
         self.print_status()
         
+        # Initialize kill switch
+        kill_switch = KillSwitch()
+        
         print(f"🚀 Bot running. Checking signals every {check_interval}s")
+        print("   Kill switch: touch ~/.vayu/KILL")
         print("   Commands: Ctrl+C to stop, will auto-generate report on exit\n")
         
         last_check = 0
@@ -228,6 +235,14 @@ class TradingBot:
         while self.running:
             try:
                 current_time = time.time()
+                
+                # Check kill switch
+                is_killed, reason = kill_switch.check_kill()
+                if is_killed:
+                    print(f"\n🚨 {reason}")
+                    print("   Stopping bot immediately...")
+                    self.running = False
+                    break
                 
                 # Check stops more frequently
                 if self.paper_positions:
@@ -301,7 +316,16 @@ def main():
             paper_mode = True
             sandbox = True
     
-    bot = TradingBot(sandbox=sandbox, paper_mode=paper_mode)
+    # Get API keys from environment (empty for sandbox)
+    api_key = os.environ.get('KRAKEN_API_KEY', '')
+    api_secret = os.environ.get('KRAKEN_API_SECRET', '')
+    
+    bot = TradingBot(
+        api_key=api_key,
+        api_secret=api_secret,
+        sandbox=sandbox,
+        paper_mode=paper_mode
+    )
     bot.run(check_interval=args.interval)
 
 

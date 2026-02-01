@@ -42,9 +42,10 @@ class KrakenClient:
             'enableRateLimit': True,
         }
         
+        # Note: Kraken doesn't have a sandbox in CCXT
+        # Paper mode is handled at the bot level, not exchange level
         if sandbox:
-            config['sandbox'] = True
-            logger.info("📝 Using Kraken SANDBOX")
+            logger.info("📝 Using Kraken API (paper mode - no real trades)")
         
         self.exchange = ccxt.kraken(config)
         
@@ -55,6 +56,16 @@ class KrakenClient:
         # Market data cache
         self._price_cache = {}
         self._cache_ttl = 5  # seconds
+    
+    def load_markets(self):
+        """Load available markets from Kraken."""
+        try:
+            markets = self.exchange.load_markets()
+            logger.info(f"📊 Loaded {len(markets)} markets")
+            return markets
+        except Exception as e:
+            logger.error(f"Failed to load markets: {e}")
+            return {}
     
     def get_balance(self) -> Optional[Dict]:
         """
