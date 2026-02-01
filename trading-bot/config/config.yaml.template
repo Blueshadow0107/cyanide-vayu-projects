@@ -1,0 +1,38 @@
+# VAYU Trading Bot Configuration Template
+# Copy to ~/.vayu/config.yaml and fill in your credentials
+
+kraken:
+  api_key: ""      # Set via env var KRAKEN_API_KEY (recommended)
+  api_secret: ""   # Set via env var KRAKEN_API_SECRET (recommended)
+  sandbox: true    # Set to false for live trading
+
+risk:
+  risk_per_trade: 0.01        # 1% per trade
+  max_daily_loss: 0.05        # 5% circuit breaker
+  max_positions: 3
+  max_leverage: 1.0           # NO MARGIN - hard cap at 1x
+
+trading:
+  pairs:
+    - BTC/USD
+    - ETH/USD
+  timeframe: 1h
+  
+strategy:
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  ema_period: 200
+  atr_multiplier: 3           # Stop distance = 3 * ATR
+  max_hold_hours: 48
+
+safety:
+  stale_data_threshold_sec: 30
+  rate_limit_requests_per_min: 120  # Kraken: 60 public, 60 private
+  emergency_stop_file: "~/.vayu/KILL"
+  
+logging:
+  level: INFO
+  trade_journal_csv: "~/.vayu/logs/trade_journal.csv"
+  state_db: "~/.vayu/state.db"
+  discord_webhook: ""  # Optional: for alerts

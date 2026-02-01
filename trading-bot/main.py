@@ -53,7 +53,7 @@ class TradingBot:
         print(f"✅ Connected to Kraken ({'sandbox' if sandbox else 'LIVE'})")
         
         self.feed = PriceFeed(self.client)
-        self.strategy = RSIMomentumStrategy(timeframe=timeframe, rsi_oversold=40, rsi_overbought=60)
+        self.strategy = RSIMomentumStrategy(timeframe=timeframe)
         self.risk = RiskEngine(RiskLimits())
         self.orders = OrderManager(self.client, self.risk)
         self.paper_report = PaperTradingReport()

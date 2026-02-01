@@ -1,0 +1,44 @@
+# Paper Trading Configuration
+# Copy to ~/.vayu/config.paper.yaml and fill in API credentials
+
+kraken:
+  api_key: ""           # Set via env: export KRAKEN_API_KEY=xxx
+  api_secret: ""        # Set via env: export KRAKEN_API_SECRET=xxx
+  sandbox: true         # PAPER TRADING - no real money
+
+risk:
+  risk_per_trade: 0.01        # 1% per trade
+  max_daily_loss: 0.05        # 5% circuit breaker
+  max_positions: 3            # Max concurrent positions
+  max_leverage: 1.0           # NO MARGIN - hard cap
+
+trading:
+  pairs:
+    - BTC/USD
+    - ETH/USD
+  timeframe: 1h
+  
+strategy:
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  ema_period: 200
+  atr_multiplier: 3           # Stop distance = 3 * ATR
+  max_hold_hours: 48
+
+safety:
+  stale_data_threshold_sec: 30
+  rate_limit_requests_per_min: 120
+  emergency_stop_file: "~/.vayu/KILL"
+  
+logging:
+  level: INFO
+  trade_journal_csv: "~/.vayu/logs/paper_trades.csv"
+  state_db: "~/.vayu/paper_state.db"
+  discord_webhook: ""  # Optional: for alerts
+
+# Paper trading specific
+paper:
+  initial_balance: 10000      # Starting virtual USD
+  slippage_simulation: 0.001  # 0.1% slippage on fills
+  latency_ms: 100             # Simulated API latency
