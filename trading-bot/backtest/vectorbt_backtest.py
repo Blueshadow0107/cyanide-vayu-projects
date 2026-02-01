@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 from typing import Dict, Tuple, Optional
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,13 +47,108 @@ class VAYUBacktester:
         symbol: str,
         start_date: str,
         end_date: str,
-        timeframe: str = '1h'
+        timeframe: str = '1h',
+        use_kraken: bool = True
     ) -> pd.Series:
         """
         Load historical price data.
         
-        For now, uses yfinance. Replace with Kraken historical data fetch.
+        Uses Kraken via CCXT for crypto data (better for 1h+ timeframes).
+        Falls back to yfinance for other assets.
         """
+        if use_kraken and symbol in ['BTC/USD', 'ETH/USD', 'BTC/USDT', 'ETH/USDT']:
+            logger.info(f"Loading Kraken data for {symbol} from {start_date} to {end_date}")
+            return self._load_kraken_data(symbol, start_date, end_date, timeframe)
+        else:
+            return self._load_yfinance_data(symbol, start_date, end_date, timeframe)
+    
+    def _load_kraken_data(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        timeframe: str = '1h'
+    ) -> pd.Series:
+        """Fetch historical data from Kraken using CCXT."""
+        import ccxt
+        
+        # Initialize Kraken exchange (public API, no key needed for historical data)
+        exchange = ccxt.kraken({'enableRateLimit': True})
+        
+        # Convert dates to timestamps (milliseconds)
+        start_ts = int(pd.Timestamp(start_date).timestamp() * 1000)
+        end_ts = int(pd.Timestamp(end_date).timestamp() * 1000)
+        
+        # Map timeframe to minutes for CCXT
+        timeframe_map = {
+            '1m': '1m', '5m': '5m', '15m': '15m',
+            '30m': '30m', '1h': '1h', '4h': '4h',
+            '1d': '1d', '1w': '1w'
+        }
+        tf = timeframe_map.get(timeframe, '1h')
+        
+        logger.info(f"Fetching {symbol} {tf} data from Kraken...")
+        
+        # Fetch OHLCV data
+        all_ohlcv = []
+        since = start_ts
+        limit = 1000  # Max candles per request
+        
+        while since < end_ts:
+            try:
+                ohlcv = exchange.fetch_ohlcv(symbol, tf, since=since, limit=limit)
+                if not ohlcv:
+                    break
+                
+                all_ohlcv.extend(ohlcv)
+                
+                # Update since to last candle + 1
+                since = ohlcv[-1][0] + 1
+                
+                # Rate limiting
+                time.sleep(exchange.rateLimit / 1000)
+                
+                logger.info(f"  Fetched {len(ohlcv)} candles, total: {len(all_ohlcv)}")
+                
+                # Break if we got less than limit (reached end)
+                if len(ohlcv) < limit:
+                    break
+                    
+            except Exception as e:
+                logger.error(f"Error fetching data: {e}")
+                break
+        
+        if not all_ohlcv:
+            raise ValueError(f"No data returned for {symbol} from Kraken")
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(
+            all_ohlcv,
+            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        )
+        
+        # Convert timestamp to datetime
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('datetime', inplace=True)
+        
+        # Filter to date range
+        df = df[df.index >= start_date]
+        df = df[df.index <= end_date]
+        
+        price = df['close']
+        self.price_data[symbol] = price
+        
+        logger.info(f"Loaded {len(price)} bars from Kraken")
+        return price
+    
+    def _load_yfinance_data(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        timeframe: str = '1h'
+    ) -> pd.Series:
+        """Fallback to yfinance for non-crypto assets."""
         import yfinance as yf
         
         ticker_map = {
@@ -62,21 +158,20 @@ class VAYUBacktester:
         
         ticker = ticker_map.get(symbol, symbol)
         
-        logger.info(f"Loading data for {symbol} ({ticker}) from {start_date} to {end_date}")
+        logger.info(f"Loading yfinance data for {symbol} ({ticker})")
         
         df = yf.download(ticker, start=start_date, end=end_date, interval=timeframe)
         
         if df.empty:
             raise ValueError(f"No data returned for {symbol}")
         
-        # Handle multi-index columns from yfinance
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         
         price = df['Close']
         self.price_data[symbol] = price
         
-        logger.info(f"Loaded {len(price)} bars")
+        logger.info(f"Loaded {len(price)} bars from yfinance")
         return price
     
     def calculate_rsi(self, price: pd.Series, period: int = 14) -> pd.Series:
@@ -362,8 +457,11 @@ def main():
     
     bt = VAYUBacktester()
     
-    # Load data
-    price = bt.load_data('BTC/USD', '2023-01-01', '2025-01-01', '1h')
+    # Load data from Kraken (1h candles, 2+ years of history)
+    print("\nUsing Kraken data source for 1h candles")
+    print("This provides full historical data vs yfinance's 730-day limit\n")
+    
+    price = bt.load_data('BTC/USD', '2023-01-01', '2025-01-01', '1h', use_kraken=True)
     
     # Split for OOS validation
     split_idx = int(len(price) * 0.7)
