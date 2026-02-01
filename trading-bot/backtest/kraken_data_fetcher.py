@@ -124,10 +124,10 @@ class KrakenDataFetcher:
         """Save data to disk for caching."""
         # Clean symbol for filename
         safe_symbol = symbol.replace('/', '_')
-        filename = f"{safe_symbol}_{timeframe}.parquet"
+        filename = f"{safe_symbol}_{timeframe}.csv"
         filepath = self.data_dir / filename
         
-        df.to_parquet(filepath)
+        df.to_csv(filepath, index=False)
         logger.info(f"Saved to {filepath}")
     
     def load_cached(
@@ -144,13 +144,13 @@ class KrakenDataFetcher:
             DataFrame or None if cache miss
         """
         safe_symbol = symbol.replace('/', '_')
-        filename = f"{safe_symbol}_{timeframe}.parquet"
+        filename = f"{safe_symbol}_{timeframe}.csv"
         filepath = self.data_dir / filename
         
         if not filepath.exists():
             return None
         
-        df = pd.read_parquet(filepath)
+        df = pd.read_csv(filepath)
         
         # Check if data covers requested range
         if since and df.index[0] > since:
