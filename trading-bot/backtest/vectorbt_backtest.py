@@ -110,7 +110,7 @@ class VAYUBacktester:
         rsi_overbought: float = 70,
         ema_period: int = 200,
         prevent_lookahead: bool = True
-    ) -> Tuple[pd.Series, pd.Series]:
+    ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
         """
         Generate entry and exit signals.
         
@@ -123,7 +123,7 @@ class VAYUBacktester:
             prevent_lookahead: If True, shift signals to prevent look-ahead bias
         
         Returns:
-            (entries, exits) boolean series
+            (long_entries, long_exits, short_entries, short_exits) boolean series
         """
         # Calculate indicators
         rsi = self.calculate_rsi(price, rsi_period)
@@ -137,42 +137,49 @@ class VAYUBacktester:
         long_entry_raw = (rsi < rsi_oversold) & in_uptrend
         short_entry_raw = (rsi > rsi_overbought) & in_downtrend
         
-        # Combine entries (can be both long and short signals)
-        entries_raw = long_entry_raw | short_entry_raw
-        
-        # Exit: RSI mean reversion to 50
-        exits_raw = ((rsi > 50) & long_entry_raw.shift(1).fillna(False)) | \
-                    ((rsi < 50) & short_entry_raw.shift(1).fillna(False))
+        # Exit signals (raw) - RSI mean reversion to 50
+        # Long exit: RSI crosses above 50 (from below)
+        long_exit_raw = (rsi > 50) & (rsi.shift(1) <= 50)
+        # Short exit: RSI crosses below 50 (from above)  
+        short_exit_raw = (rsi < 50) & (rsi.shift(1) >= 50)
         
         # LOOK-AHEAD BIAS PREVENTION
         # Shift signals by 1 to simulate executing on NEXT bar's open
         if prevent_lookahead:
-            entries = entries_raw.shift(1).fillna(False)
-            exits = exits_raw.shift(1).fillna(False)
+            long_entries = long_entry_raw.shift(1).fillna(False)
+            long_exits = long_exit_raw.shift(1).fillna(False)
+            short_entries = short_entry_raw.shift(1).fillna(False)
+            short_exits = short_exit_raw.shift(1).fillna(False)
             logger.info("Look-ahead bias prevention: signals shifted by 1 bar")
         else:
-            entries = entries_raw
-            exits = exits_raw
+            long_entries = long_entry_raw
+            long_exits = long_exit_raw
+            short_entries = short_entry_raw
+            short_exits = short_exit_raw
         
-        return entries, exits
+        return long_entries, long_exits, short_entries, short_exits
     
     def run_backtest(
         self,
         price: pd.Series,
-        entries: pd.Series,
-        exits: pd.Series,
+        long_entries: pd.Series,
+        long_exits: pd.Series,
+        short_entries: pd.Series = None,
+        short_exits: pd.Series = None,
         init_cash: float = 10000,
         fees: float = 0.001,  # 0.1%
         slippage: float = 0.001,  # 0.1%
         freq: str = '1h'
     ) -> vbt.Portfolio:
         """
-        Run VectorBT backtest.
+        Run VectorBT backtest with long/short support.
         
         Args:
             price: Price series
-            entries: Entry signals
-            exits: Exit signals
+            long_entries: Long entry signals
+            long_exits: Long exit signals
+            short_entries: Short entry signals (optional)
+            short_exits: Short exit signals (optional)
             init_cash: Starting capital
             fees: Commission per trade (0.001 = 0.1%)
             slippage: Slippage estimate
@@ -180,8 +187,10 @@ class VAYUBacktester:
         """
         portfolio = vbt.Portfolio.from_signals(
             price,
-            entries,
-            exits,
+            entries=long_entries,
+            exits=long_exits,
+            short_entries=short_entries,
+            short_exits=short_exits,
             init_cash=init_cash,
             fees=fees,
             slippage=slippage,
@@ -212,12 +221,15 @@ class VAYUBacktester:
         for rsi_p in rsi_windows:
             for oversold in oversold_range:
                 for overbought in overbought_range:
-                    entries, exits = self.generate_signals(
+                    long_entries, long_exits, short_entries, short_exits = self.generate_signals(
                         price, rsi_p, oversold, overbought,
                         prevent_lookahead=True
                     )
                     
-                    pf = self.run_backtest(price, entries, exits)
+                    pf = self.run_backtest(
+                        price, long_entries, long_exits, 
+                        short_entries, short_exits
+                    )
                     
                     stats = pf.stats()
                     
@@ -287,7 +299,7 @@ class VAYUBacktester:
             best = opt_df.iloc[0]
             
             # Test on out-of-sample
-            entries, exits = self.generate_signals(
+            long_entries, long_exits, short_entries, short_exits = self.generate_signals(
                 test_price,
                 rsi_period=int(best['rsi_period']),
                 rsi_oversold=best['oversold'],
@@ -295,7 +307,10 @@ class VAYUBacktester:
                 prevent_lookahead=True
             )
             
-            pf = self.run_backtest(test_price, entries, exits)
+            pf = self.run_backtest(
+                test_price, long_entries, long_exits,
+                short_entries, short_exits
+            )
             stats = pf.stats()
             
             results.append({
@@ -379,7 +394,7 @@ def main():
           f"oversold={best['oversold']}, overbought={best['overbought']}")
     
     # In-sample backtest with best params
-    entries_train, exits_train = bt.generate_signals(
+    le_train, lx_train, se_train, sx_train = bt.generate_signals(
         train_price,
         rsi_period=int(best['rsi_period']),
         rsi_oversold=best['oversold'],
@@ -387,7 +402,7 @@ def main():
         prevent_lookahead=True
     )
     
-    pf_train = bt.run_backtest(train_price, entries_train, exits_train)
+    pf_train = bt.run_backtest(train_price, le_train, lx_train, se_train, sx_train)
     bt.analyze_results(pf_train, "In-Sample")
     
     # Out-of-sample backtest
@@ -395,7 +410,7 @@ def main():
     print("OUT-OF-SAMPLE VALIDATION")
     print("=" * 60)
     
-    entries_test, exits_test = bt.generate_signals(
+    le_test, lx_test, se_test, sx_test = bt.generate_signals(
         test_price,
         rsi_period=int(best['rsi_period']),
         rsi_oversold=best['oversold'],
@@ -403,7 +418,7 @@ def main():
         prevent_lookahead=True
     )
     
-    pf_test = bt.run_backtest(test_price, entries_test, exits_test)
+    pf_test = bt.run_backtest(test_price, le_test, lx_test, se_test, sx_test)
     bt.analyze_results(pf_test, "Out-of-Sample")
     
     # Walk-forward analysis
